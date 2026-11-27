@@ -1,5 +1,6 @@
-# CI/CD: validate the bundle on every PR, deploy the bundle on merge to main.
-# python, dbt, api, database and web jobs are added as those parts are built.
+# CI/CD: validate the bundle and lint the python on every PR, deploy the bundle on merge to main.
+# the databricks cli is pinned so CI and the laptop always use the same version.
+# dbt, api, database and web jobs are added as those parts are built.
 name: ci
 
 on:
@@ -15,6 +16,7 @@ concurrency:
 env:
   DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
   DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  DATABRICKS_CLI_VERSION: "1.28.0"
 
 jobs:
   validate:
@@ -23,18 +25,37 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: databricks/setup-cli@main
+        with:
+          version: ${{ env.DATABRICKS_CLI_VERSION }}
 
       - name: validate bundle
         run: databricks bundle validate -t prod
 
+  python_lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: install dev requirements
+        run: pip install -r requirements-dev.txt
+
+      - name: ruff
+        run: ruff check streaming
+
   deploy:
-    needs: validate
+    needs: [validate, python_lint]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - uses: databricks/setup-cli@main
+        with:
+          version: ${{ env.DATABRICKS_CLI_VERSION }}
 
       - name: deploy bundle
         run: databricks bundle deploy -t prod
