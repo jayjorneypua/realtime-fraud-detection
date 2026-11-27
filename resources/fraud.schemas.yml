@@ -29,3 +29,9 @@ resources:
       name: kaggle
       volume_type: MANAGED
       comment: Kaggle credit card transaction files (fraudTrain.csv, fraudTest.csv)
+    live:
+      catalog_name: fraud
+      schema_name: ${resources.schemas.landing.name}
+      name: live
+      volume_type: MANAGED
+      comment: Files landed by the lakehouse sink (transactions, transaction-labels, scores) and Auto Loader checkpoints
