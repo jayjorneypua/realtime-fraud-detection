@@ -224,3 +224,8 @@ __marimo__/
 
 .databricks/
 data/
+
+# dbt
+.venv-dbt/
+dbt_packages/
+.user.yml

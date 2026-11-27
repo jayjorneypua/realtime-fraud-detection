@@ -1,6 +1,6 @@
-# CI/CD: validate the bundle and lint the python on every PR, deploy the bundle on merge to main.
-# the databricks cli is pinned so CI and the laptop always use the same version.
-# dbt, api, database and web jobs are added as those parts are built.
+# CI/CD: validate the bundle, lint the python and parse the dbt project on every PR, deploy the bundle on merge
+# to main. the databricks cli is pinned so CI and the laptop always use the same version.
+# api, database and web jobs are added as those parts are built.
 name: ci
 
 on:
@@ -46,8 +46,23 @@ jobs:
       - name: ruff
         run: ruff check streaming
 
+  dbt_parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: install dbt
+        run: pip install -r requirements-dbt.txt
+
+      - name: dbt parse
+        run: dbt parse --project-dir dbt --profiles-dir dbt
+
   deploy:
-    needs: [validate, python_lint]
+    needs: [validate, python_lint, dbt_parse]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

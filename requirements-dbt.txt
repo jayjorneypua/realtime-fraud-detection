@@ -1,0 +1,3 @@
+# dbt only, installed into .venv-dbt (kept apart from .venv so dbt's pins never touch the scoring service's)
+dbt-core==1.10.19
+dbt-databricks==1.10.19

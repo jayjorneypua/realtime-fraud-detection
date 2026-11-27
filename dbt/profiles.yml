@@ -1,0 +1,13 @@
+# local and CI profile; credentials only come from environment variables (tools\dbt.ps1 sets them from the
+# databricks cli login). the defaults let dbt parse in CI without a connection.
+fraud_monitoring:
+  target: prod
+  outputs:
+    prod:
+      type: databricks
+      catalog: fraud
+      schema: gold
+      host: "{{ env_var('DATABRICKS_HOST', 'https://placeholder.cloud.databricks.com') | replace('https://', '') }}"
+      http_path: /sql/1.0/warehouses/606b0c60dc21c8fd
+      token: "{{ env_var('DATABRICKS_TOKEN', 'placeholder') }}"
+      threads: 4
