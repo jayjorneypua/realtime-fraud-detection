@@ -1,0 +1,24 @@
+# local event backbone and online feature store
+# kafka: localhost:9092, redis: localhost:6380 (6379 is left free for the inat redis)
+services:
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: fraud-kafka
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  redis:
+    image: redis:8.2
+    container_name: fraud-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
