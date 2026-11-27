@@ -1,21 +1,26 @@
 # one-command live run: stack up, redis backfill, scoring service and lakehouse sink in the background,
 # replay, wait until kafka shows both consumers fully caught up, stop them, run the databricks live job,
 # then stop.ps1 removes everything local. logs go to data\logs and are printed on failure.
-# usage: .\run_live.ps1                  (3000 transactions at 1000x)
+# usage: .\run_live.ps1                            (3000 transactions at 1000x, sink batches of 500)
 #        .\run_live.ps1 -Limit 20000 -Speed 5000
+#        .\run_live.ps1 -Limit 555719 -NoPacing    (full fraudTest as fast as possible, sink batches of 25000;
+#                                                   latency then includes queue time)
 param(
   [int]$Limit = 3000,
-  [double]$Speed = 1000
+  [double]$Speed = 1000,
+  [switch]$NoPacing,
+  [int]$SinkBatchSize = 0
 )
 
 [string]$Profile = "dbc-609647e1-c073"
 [string]$Python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 [string]$LogFolder = Join-Path $PSScriptRoot "data\logs"
 [int]$CatchUpTimeoutSeconds = 300 + [int]($Limit / 20)
+if ($SinkBatchSize -le 0) { $SinkBatchSize = if ($NoPacing) { 25000 } else { 500 } }
 
-function Start-Background([string]$Name, [string]$Script) {
+function Start-Background([string]$Name, [string]$Arguments) {
   New-Item -ItemType Directory -Path $LogFolder -Force | Out-Null
-  return Start-Process -FilePath $Python -ArgumentList $Script -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru `
+  return Start-Process -FilePath $Python -ArgumentList $Arguments -WorkingDirectory $PSScriptRoot -NoNewWindow -PassThru `
     -RedirectStandardOutput (Join-Path $LogFolder "$Name.out.log") -RedirectStandardError (Join-Path $LogFolder "$Name.log")
 }
 
@@ -78,12 +83,14 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "redis backfill failed" }
 
   $ScoringService = Start-Background "scoring_service" "streaming\scoring_service.py"
-  $LakehouseSink = Start-Background "lakehouse_sink" "streaming\lakehouse_sink.py"
+  $LakehouseSink = Start-Background "lakehouse_sink" "streaming\lakehouse_sink.py --batch-size $SinkBatchSize"
   Wait-ForLogText $ScoringService "scoring_service" "waiting for transactions" 300
   Wait-ForLogText $LakehouseSink "lakehouse_sink" "sinking" 120
-  Write-Host "scoring service and lakehouse sink running" -ForegroundColor Green
+  Write-Host "scoring service and lakehouse sink running (sink batch size $SinkBatchSize)" -ForegroundColor Green
 
-  & $Python streaming\replay_producer.py --limit $Limit --speed $Speed
+  [string[]]$ReplayArguments = @("streaming\replay_producer.py", "--limit", "$Limit", "--speed", "$Speed")
+  if ($NoPacing) { $ReplayArguments += "--no-pacing" }
+  & $Python @ReplayArguments
   if ($LASTEXITCODE -ne 0) { throw "replay producer failed" }
 
   # scores are published before the scoring service commits, so once it is caught up every score is in kafka;

@@ -5,6 +5,7 @@ each transaction goes to "transactions" keyed by card number, so a card's events
 partition. the fraud label goes separately to "transaction-labels", so the scorer never sees it.
 gaps between transactions follow the original timestamps divided by --speed (60 = one hour of
 transactions per minute), capped so quiet night hours do not stall the demo.
+--no-pacing publishes as fast as kafka accepts, for full-set evaluation runs (latency then includes queue time).
 published_at is the wall clock at send time, used for end-to-end latency.
 
 data/fraudTest.csv -> kafka topics transactions, transaction-labels
@@ -25,6 +26,7 @@ LABELS_TOPIC: str = "transaction-labels"
 SOURCE_FILE: str = "data/fraudTest.csv"
 MAX_SLEEP_SECONDS: float = 5.0
 PROGRESS_EVERY: int = 1000
+FULL_QUEUE_WAIT_SECONDS: float = 0.5
 
 # the fields a card network would send; is_fraud is not one of them
 TRANSACTION_FIELDS: list[str] = [
@@ -58,6 +60,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="replay fraudTest.csv into kafka")
     parser.add_argument("--speed", type=float, default=60.0, help="replay speed factor, 60 = one hour per minute")
     parser.add_argument("--limit", type=int, default=None, help="stop after this many transactions")
+    parser.add_argument("--no-pacing", action="store_true", help="publish as fast as kafka accepts, ignore --speed")
     return parser.parse_args()
 
 
@@ -83,7 +86,17 @@ def build_producer() -> Producer:
     })
 
 
-def replay(producer: Producer, transactions: pd.DataFrame, speed: float, limit: int | None) -> int:
+def produce_waiting_when_full(producer: Producer, topic: str, key: str, value: str) -> None:
+    # without pacing the local send queue fills up; wait for deliveries instead of failing
+    while True:
+        try:
+            producer.produce(topic, key=key, value=value, on_delivery=report_delivery)
+            return
+        except BufferError:
+            producer.poll(FULL_QUEUE_WAIT_SECONDS)
+
+
+def replay(producer: Producer, transactions: pd.DataFrame, speed: float, limit: int | None, no_pacing: bool) -> int:
     published_count: int = 0
     previous_transaction_time: pd.Timestamp | None = None
     started_at: float = time.monotonic()
@@ -92,7 +105,7 @@ def replay(producer: Producer, transactions: pd.DataFrame, speed: float, limit: 
         if limit is not None and published_count >= limit:
             break
 
-        if previous_transaction_time is not None:
+        if not no_pacing and previous_transaction_time is not None:
             gap_seconds: float = (row["transaction_time"] - previous_transaction_time).total_seconds() / speed
             if gap_seconds > 0:
                 time.sleep(min(gap_seconds, MAX_SLEEP_SECONDS))
@@ -109,8 +122,8 @@ def replay(producer: Producer, transactions: pd.DataFrame, speed: float, limit: 
             "published_at": published_at,
         }
 
-        producer.produce(TRANSACTIONS_TOPIC, key=card_number, value=json.dumps(transaction_event), on_delivery=report_delivery)
-        producer.produce(LABELS_TOPIC, key=card_number, value=json.dumps(label_event), on_delivery=report_delivery)
+        produce_waiting_when_full(producer, TRANSACTIONS_TOPIC, card_number, json.dumps(transaction_event))
+        produce_waiting_when_full(producer, LABELS_TOPIC, card_number, json.dumps(label_event))
         producer.poll(0)
         published_count += 1
 
@@ -124,12 +137,13 @@ def replay(producer: Producer, transactions: pd.DataFrame, speed: float, limit: 
 def main() -> None:
     arguments: argparse.Namespace = parse_arguments()
     transactions: pd.DataFrame = load_transactions(SOURCE_FILE)
-    logger.info("loaded %d transactions, replaying at %sx", len(transactions), arguments.speed)
+    pacing: str = "no pacing" if arguments.no_pacing else f"{arguments.speed}x"
+    logger.info("loaded %d transactions, replaying at %s", len(transactions), pacing)
 
     producer: Producer = build_producer()
     published_count: int = 0
     try:
-        published_count = replay(producer, transactions, arguments.speed, arguments.limit)
+        published_count = replay(producer, transactions, arguments.speed, arguments.limit, arguments.no_pacing)
     except KeyboardInterrupt:
         logger.info("stopped by user")
     finally:
