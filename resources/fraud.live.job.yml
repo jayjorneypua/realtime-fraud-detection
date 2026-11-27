@@ -1,5 +1,6 @@
 # live lakehouse job: run after the lakehouse sink has landed files. bronze picks up only new files (Auto Loader),
-# then live silver and live scores are rebuilt with the same sql as history.
+# then live silver and live scores are rebuilt with the same sql as history, then data quality checks run
+# and fail the job on any error-severity check.
 resources:
   jobs:
     fraud_live_lakehouse:
@@ -13,3 +14,10 @@ resources:
             - task_key: bronze_live
           notebook_task:
             notebook_path: ../notebooks/07_silver_live.py
+        - task_key: data_quality
+          depends_on:
+            - task_key: silver_live
+          notebook_task:
+            notebook_path: ../notebooks/08_data_quality.py
+            base_parameters:
+              run_id: "{{job.run_id}}"
