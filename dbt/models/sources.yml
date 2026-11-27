@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: silver
+    database: fraud
+    schema: silver
+    tables:
+      - name: transactions_live
+        description: live transactions with their fraud label, one row per transaction
+        columns:
+          - name: transaction_id
+            data_tests:
+              - unique
+              - not_null
+
+  - name: gold
+    database: fraud
+    schema: gold
+    tables:
+      - name: scores_live
+        description: live scores from the scoring service, latest score per transaction
+        columns:
+          - name: transaction_id
+            data_tests:
+              - unique
+              - not_null

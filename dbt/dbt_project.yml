@@ -1,0 +1,17 @@
+# fraud monitoring marts: daily alerts, score drift and model vs actual, built from the live tables.
+# fraud.silver.transactions_live + fraud.gold.scores_live -> fraud.gold.monitoring_*
+name: fraud_monitoring
+version: "1.0.0"
+config-version: 2
+profile: fraud_monitoring
+
+model-paths: ["models"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: ["target"]
+
+models:
+  fraud_monitoring:
+    +materialized: table
+    staging:
+      +materialized: ephemeral
