@@ -1,0 +1,25 @@
+bundle:
+  name: realtime_fraud_detection
+
+workspace:
+  host: https://dbc-609647e1-c073.cloud.databricks.com
+  # per-user folder, same pattern as synthea and inat
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+include:
+  - resources/*.yml
+
+# only notebooks and sql run on Databricks; the live path, api, web and database stay local
+sync:
+  exclude:
+    - docs/**
+    - tools/**
+    - streaming/**
+    - api/**
+    - web/**
+    - database/**
+    - docker-compose.yml
+
+targets:
+  prod:
+    default: true

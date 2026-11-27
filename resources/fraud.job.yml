@@ -1,0 +1,39 @@
+resources:
+  jobs:
+    fraud_training_pipeline:
+      name: fraud_training_pipeline
+      max_concurrent_runs: 1
+      # no schedule: retraining is run on demand
+
+      email_notifications:
+        on_failure:
+          - jayjorneypua@gmail.com
+
+      tasks:
+        - task_key: download_data
+          notebook_task:
+            notebook_path: ../notebooks/01_download_data.py
+
+        - task_key: bronze_history
+          depends_on:
+            - task_key: download_data
+          notebook_task:
+            notebook_path: ../notebooks/02_bronze_history.py
+
+        - task_key: silver_history
+          depends_on:
+            - task_key: bronze_history
+          notebook_task:
+            notebook_path: ../notebooks/03_silver_history.py
+
+        - task_key: features_history
+          depends_on:
+            - task_key: silver_history
+          notebook_task:
+            notebook_path: ../notebooks/04_features_history.py
+
+        - task_key: train_models
+          depends_on:
+            - task_key: features_history
+          notebook_task:
+            notebook_path: ../notebooks/05_train_models.py

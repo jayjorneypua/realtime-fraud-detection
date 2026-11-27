@@ -1,0 +1,31 @@
+# landing holds the raw files. bronze/silver/gold hold the tables. ml holds the registered model.
+resources:
+  schemas:
+    landing:
+      catalog_name: fraud
+      name: landing
+      comment: Raw files from Kaggle and the live lakehouse sink
+    bronze:
+      catalog_name: fraud
+      name: bronze
+      comment: Transactions as received, all columns as strings
+    silver:
+      catalog_name: fraud
+      name: silver
+      comment: Typed, deduplicated, de-identified transactions
+    gold:
+      catalog_name: fraud
+      name: gold
+      comment: Per-card transaction features, scores and monitoring marts
+    ml:
+      catalog_name: fraud
+      name: ml
+      comment: Registered fraud models
+
+  volumes:
+    kaggle:
+      catalog_name: fraud
+      schema_name: ${resources.schemas.landing.name}
+      name: kaggle
+      volume_type: MANAGED
+      comment: Kaggle credit card transaction files (fraudTrain.csv, fraudTest.csv)
